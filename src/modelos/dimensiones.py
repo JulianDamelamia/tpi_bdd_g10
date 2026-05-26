@@ -3,7 +3,7 @@ import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String,ForeignKey, DateTime
 
-from db.base import Base
+from .base import Base
 from .hechos import FactRespuesta
 #Convención nomenclatura
 # class PascalCaseSingular(Base):

@@ -62,24 +62,32 @@ The choice of a Document-oriented NoSQL engine (e.g., MongoDB) is driven by docu
 #### Collection Design: `surveys`
 This collection maintains the blueprint of the survey structures.
 ```json
+##ejemplo encuesta
 {
-  "_id": "srv_abc123_2026",
-  "title": "Q2 Customer Feedback",
-  "creator_id": "usr_exec_77",
-  "status": "active",
-  "created_at": "2026-05-10T14:22:00Z",
-  "questions": [
+  "_id": "mineria_05_2026",
+  "titulo": "Encuesta sobre minería - Mayo 2026",
+  "fecha_creacion": "2026-05-10T14:22:00Z",
+  "preguntas": [
     {
-      "question_id": "q_001",
-      "type": "numeric_scale",
-      "text": "Rate our customer service speed from 1-5.",
-      "validation": { "min": 1, "max": 5 }
+      "pregunta_id": "p01",
+      "tipo": "multiple_choice",
+      "texto": "¿Con qué espacio político se siente más identificado?",
+      "opciones": [
+        { "codigo": 1, "texto": "Partido ultragarca" },
+        { "codigo": 2, "texto": "Mentira y propaganda" },
+        { "codigo": 3, "texto": "Los inoperantes de siempre" },
+        { "codigo": 4, "texto": "Frente de injunables" }
+      ]
     },
     {
-      "question_id": "q_002",
-      "type": "multiple_choice",
-      "text": "Which package did you purchase?",
-      "options": ["Basic", "Professional", "Enterprise"]
+      "pregunta_id": "p02",
+      "tipo": "rango",
+      "texto": "¿Qué tan de acuerdo está con la siguiente frase: 'regalar el país...'?",
+      "opciones": [
+        { "codigo": 1, "texto": "Mucho" },
+        { "codigo": 2, "texto": "Algo" },
+        { "codigo": 3, "texto": "Poco" }
+      ]
     }
   ]
 }
@@ -91,16 +99,20 @@ This collection maintains the blueprint of the survey structures.
 This collection isolates operational throughput. It does not enforce structural schemas across separate documents; if an entry contains modified question keys, the database writes it natively without impedance.
 
 ```json
-{
-  "_id": "resp_99824_xyz",
-  "survey_id": "srv_abc123_2026",
-  "respondent_id": "anon_91823",
-  "submitted_at": "2026-05-17T19:05:12Z",
-  "answers": [
-    { "question_id": "q_001", "value": 5 },
-    { "question_id": "q_002", "value": "Professional" }
-  ]
-}
+## ejemplo respuesta
+{ 
+	"_id": "resp_99824_xyz", 
+	"encuesta_id": "mineria_05_2026", 
+	"encuestado_id": "1122334455", 
+	"fecha": "2026-05-17T19:05:12Z",
+  "fuente": "telefono",
+	"procesado_por_etl": false, 
+	"respuestas": [
+		{ "pregunta_id": "p01", "valor": 1 },
+		{ "pregunta_id": "p02", "valor": 3 } 
+	] 
+} 
+ 
 
 ```
 

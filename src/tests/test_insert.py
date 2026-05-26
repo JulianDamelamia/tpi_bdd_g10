@@ -1,15 +1,19 @@
 from datetime import date
-
-from db.conexion import SessionLocal
-
 from modelos.dimensiones import (
     DimFecha,
     DimEncuesta
 )
 
 from modelos.hechos import FactRespuesta
+from sqlalchemy.orm import sessionmaker
+from config import DATABASE_URL
+from sqlalchemy import create_engine
 
-
+engine = create_engine(
+    DATABASE_URL['postgres'],
+    echo=True
+)
+SessionLocal = sessionmaker(bind=engine)
 session = SessionLocal()
 
 fecha = DimFecha(

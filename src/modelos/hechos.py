@@ -3,7 +3,7 @@ import datetime
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import DateTime, String, ForeignKey
 
-from db.base import Base
+from .base import Base
 class FactRespuesta(Base):
     __tablename__ = "fact_respuestas"
 
