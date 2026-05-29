@@ -1,0 +1,35 @@
+name: ETL encuestas
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  run-etl:
+    runs-on: ubuntu-latest
+
+    env:
+      mongodb_url: ${{ secrets.MONGODB_URL }}
+      host: ${{ secrets.POSTGRES_HOST }}
+      port: ${{ secrets.POSTGRES_PORT }}
+      database: ${{ secrets.POSTGRES_DB }}
+      user: ${{ secrets.POSTGRES_USER }}
+      password: ${{ secrets.POSTGRES_PASSWORD }}
+      ambiente: PRD
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run ETL
+        run: python main.py
