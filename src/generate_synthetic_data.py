@@ -1,0 +1,179 @@
+import datetime as dt
+import random
+
+from pymongo import MongoClient, ReplaceOne
+
+try:
+    from src.config import MONGODB_DATABASE, MONGODB_URL
+except ModuleNotFoundError:
+    from config import MONGODB_DATABASE, MONGODB_URL
+
+
+RANDOM_SEED = 20260527
+SURVEY_COUNT = 1000
+QUESTIONS_PER_SURVEY = 3
+RESPONSES_PER_SURVEY = 4
+TIME_DAYS = 1000
+
+TOPICS = [
+    "intencion_voto_presidencial",
+    "imagen_gobierno",
+    "economia_domestica",
+    "seguridad",
+    "educacion",
+    "salud_publica",
+    "obra_publica",
+    "mineria",
+]
+SOURCES = ["web", "telefono", "presencial", "app"]
+PARTIES = [
+    "Frente Federal",
+    "Movimiento Popular",
+    "Union Republicana",
+    "Alianza Verde",
+    "Partido Vecinal",
+]
+APPROVAL = ["Muy buena", "Buena", "Regular", "Mala", "Muy mala"]
+PRIORITIES = ["Inflacion", "Seguridad", "Empleo", "Educacion", "Salud"]
+
+
+def option_texts_for(question_number: int) -> list[str]:
+    if question_number == 1:
+        return PARTIES
+    if question_number == 2:
+        return APPROVAL
+    return PRIORITIES
+
+
+def question_metadata(question_number: int) -> tuple[str, str, str]:
+    if question_number == 1:
+        return (
+            "A que espacio politico votaria si las elecciones fueran hoy?",
+            "multiple_choice",
+            "intencion_voto",
+        )
+    if question_number == 2:
+        return (
+            "Como evalua la gestion del gobierno nacional?",
+            "multiple_choice",
+            "imagen_gobierno",
+        )
+    return (
+        "Cual deberia ser la principal prioridad de la agenda publica?",
+        "multiple_choice",
+        "prioridad_publica",
+    )
+
+
+def build_survey_document(survey_number: int, created_base: dt.datetime) -> dict:
+    topic = TOPICS[(survey_number - 1) % len(TOPICS)]
+    survey_id = f"survey_{survey_number:04d}"
+    questions = []
+
+    for question_number in range(1, QUESTIONS_PER_SURVEY + 1):
+        question_id = f"{survey_id}_q{question_number:02d}"
+        question_text, question_type, category = question_metadata(question_number)
+        questions.append(
+            {
+                "pregunta_id": question_id,
+                "tipo": question_type,
+                "texto": question_text,
+                "categoria": category,
+                "opciones": [
+                    {
+                        "option_id": f"{question_id}_opt{option_code:02d}",
+                        "codigo": option_code,
+                        "texto": option_text,
+                    }
+                    for option_code, option_text in enumerate(
+                        option_texts_for(question_number),
+                        start=1,
+                    )
+                ],
+            }
+        )
+
+    return {
+        "_id": survey_id,
+        "titulo": f"Encuesta politica {survey_number:04d} - {topic}",
+        "creator_id": f"org_{(survey_number % 40) + 1:03d}",
+        "status": "active" if survey_number % 10 else "closed",
+        "fecha_creacion": (created_base + dt.timedelta(hours=survey_number)).isoformat(),
+        "tema": topic,
+        "preguntas": questions,
+    }
+
+
+def build_response_documents(survey_number: int, valid_dates: list[dt.date]) -> list[dict]:
+    survey_id = f"survey_{survey_number:04d}"
+    responses = []
+
+    for response_number in range(1, RESPONSES_PER_SURVEY + 1):
+        response_id = f"resp_{survey_number:04d}_{response_number:03d}"
+        respondent_id = f"person_{((survey_number * 17 + response_number) % 25000):05d}"
+        submitted_date = random.choice(valid_dates)
+        submitted_at = dt.datetime.combine(
+            submitted_date,
+            dt.time(random.randrange(8, 22), random.randrange(0, 60), random.randrange(0, 60)),
+        )
+        source = random.choice(SOURCES)
+        answers = []
+
+        for question_number in range(1, QUESTIONS_PER_SURVEY + 1):
+            question_id = f"{survey_id}_q{question_number:02d}"
+            answer_code = random.randint(1, len(option_texts_for(question_number)))
+            answers.append(
+                {
+                    "pregunta_id": question_id,
+                    "opcion_id": f"{question_id}_opt{answer_code:02d}",
+                    "valor": answer_code,
+                    "texto": option_texts_for(question_number)[answer_code - 1],
+                }
+            )
+
+        responses.append(
+            {
+                "_id": response_id,
+                "encuesta_id": survey_id,
+                "encuestado_id": respondent_id,
+                "fecha": submitted_at.isoformat(),
+                "fuente": source,
+                "respuestas": answers,
+            }
+        )
+
+    return responses
+
+
+def generate() -> tuple[int, int]:
+    random.seed(RANDOM_SEED)
+    client = MongoClient(MONGODB_URL)
+    db = client[MONGODB_DATABASE]
+    created_base = dt.datetime(2026, 1, 1, 9, 0, 0)
+    start_date = dt.date(2024, 1, 1)
+    valid_dates = [start_date + dt.timedelta(days=offset) for offset in range(TIME_DAYS)]
+
+    survey_operations = []
+    response_operations = []
+
+    for survey_number in range(1, SURVEY_COUNT + 1):
+        survey = build_survey_document(survey_number, created_base)
+        survey_operations.append(ReplaceOne({"_id": survey["_id"]}, survey, upsert=True))
+
+        for response in build_response_documents(survey_number, valid_dates):
+            response_operations.append(ReplaceOne({"_id": response["_id"]}, response, upsert=True))
+
+    if survey_operations:
+        db.surveys.bulk_write(survey_operations, ordered=False)
+    if response_operations:
+        db.responses.bulk_write(response_operations, ordered=False)
+
+    db.responses.create_index("encuesta_id")
+
+    print(f"Loaded {len(survey_operations)} survey documents into MongoDB.")
+    print(f"Loaded {len(response_operations)} response documents into MongoDB.")
+    return len(survey_operations), len(response_operations)
+
+
+if __name__ == "__main__":
+    generate()
