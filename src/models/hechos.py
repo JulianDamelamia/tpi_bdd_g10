@@ -32,7 +32,11 @@ class FactSurveyResponse(Base):
         nullable=True,
         index=True,
     )
-    respondent_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    respondent_id: Mapped[str] = mapped_column(
+        ForeignKey("dim_respondents.respondent_id"),
+        nullable=False,
+        index=True,
+    )
     answer_text: Mapped[str | None] = mapped_column(Text)
     answer_numeric: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     date_key: Mapped[int] = mapped_column(
@@ -47,3 +51,4 @@ class FactSurveyResponse(Base):
     question: Mapped["DimQuestion"] = relationship(back_populates="responses")
     answer_option: Mapped["DimAnswerOption"] = relationship(back_populates="responses")
     time: Mapped["DimTime"] = relationship(back_populates="responses")
+    respondent: Mapped["DimRespondent"] = relationship(back_populates="responses")
