@@ -1,5 +1,6 @@
 .env
+.venv/
 __pycache__/
 *.pyc
-
-.venv/
+.DS_Store
+RESUME_STATE.md
