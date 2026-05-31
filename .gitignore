@@ -4,4 +4,9 @@ __pycache__/
 *.pyc
 .DS_Store
 RESUME_STATE.md
+<<<<<<< HEAD
 .vscode/
+=======
+docker-compose.local.yml
+docker-compose.yml
+>>>>>>> b90a6a5 (modifico gitignore para que no me trackee el docker-compose)
