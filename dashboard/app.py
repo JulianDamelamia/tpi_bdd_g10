@@ -3,6 +3,7 @@
 Organizado en pestañas: intención de voto, imagen de gobierno, prioridades,
 muestra/demografía y un explorador de predicción bayesiana.
 """
+import json
 import sys
 import pathlib
 
@@ -17,6 +18,16 @@ from src.config import POSTGRES_URL
 
 st.set_page_config(page_title="Inteligencia Colectiva — BI", layout="wide")
 engine = create_engine(POSTGRES_URL)
+
+
+@st.cache_data
+def _load_geojson():
+    """Polígonos de las 24 provincias (GADM nivel 1, propiedad NAME_1)."""
+    path = pathlib.Path(__file__).resolve().parent / "argentina_provincias.geojson"
+    return json.loads(path.read_text())
+
+
+ARG_GEOJSON = _load_geojson()
 
 CORTE = "2026-09-26"
 POSITIVAS = ("Muy buena", "Buena")
@@ -71,14 +82,16 @@ with tab_voto:
     piv = voto_reg.pivot_table(index="region", columns="opcion", values="n", fill_value=0)
     pct = piv.div(piv.sum(axis=1), axis=0) * 100
 
-    # mapa: una burbuja por region, coloreada por el partido ganador
-    REGION_CENTROIDS = {
-        "AMBA":      (-34.6, -58.4),
-        "Centro":    (-33.0, -62.0),
-        "NOA":       (-25.0, -65.5),
-        "NEA":       (-27.5, -57.5),
-        "Cuyo":      (-33.5, -68.8),
-        "Patagonia": (-44.0, -68.0),
+    # mapa: provincias rellenas — color = partido ganador de su región, intensidad = share
+    PROV_REGION = {
+        "Ciudad de Buenos Aires": "AMBA", "Buenos Aires": "AMBA",
+        "Córdoba": "Centro", "Santa Fe": "Centro", "Entre Ríos": "Centro", "La Pampa": "Centro",
+        "Jujuy": "NOA", "Salta": "NOA", "Tucumán": "NOA", "Catamarca": "NOA",
+        "La Rioja": "NOA", "Santiago del Estero": "NOA",
+        "Misiones": "NEA", "Corrientes": "NEA", "Chaco": "NEA", "Formosa": "NEA",
+        "Mendoza": "Cuyo", "San Juan": "Cuyo", "San Luis": "Cuyo",
+        "Neuquén": "Patagonia", "Río Negro": "Patagonia", "Chubut": "Patagonia",
+        "Santa Cruz": "Patagonia", "Tierra del Fuego": "Patagonia",
     }
     mapa = pd.DataFrame({
         "region": pct.index,
@@ -86,18 +99,44 @@ with tab_voto:
         "share": pct.max(axis=1).round(1).values,
         "total": piv.sum(axis=1).values,
     })
-    mapa["lat"] = mapa["region"].map(lambda r: REGION_CENTROIDS[r][0])
-    mapa["lon"] = mapa["region"].map(lambda r: REGION_CENTROIDS[r][1])
-    st.markdown("**Partido ganador por región**")
-    fig_map = px.scatter_geo(
-        mapa, lat="lat", lon="lon", color="ganador", size="total", text="region",
-        hover_data={"share": True, "lat": False, "lon": False, "total": True},
+    # cada provincia hereda el resultado de su región
+    prov = (
+        pd.DataFrame({"provincia": list(PROV_REGION), "region": list(PROV_REGION.values())})
+        .merge(mapa, on="region", how="left")
     )
-    fig_map.update_traces(textposition="top center")
-    fig_map.update_geos(scope="south america", showcountries=True,
-                        countrycolor="gray", fitbounds="locations")
-    fig_map.update_layout(height=520, margin=dict(l=0, r=0, t=0, b=0))
+    # un color base por partido; se aclara hacia el blanco cuanto menor es el share
+    partidos = sorted(mapa["ganador"].unique())
+    base = {p: px.colors.qualitative.Plotly[i % 10] for i, p in enumerate(partidos)}
+    smin, smax = prov["share"].min(), prov["share"].max()
+
+    def _shade(share, party):
+        r, g, b = px.colors.hex_to_rgb(base[party])
+        t = 0.40 + 0.60 * (((share - smin) / (smax - smin)) if smax > smin else 1.0)
+        return f"rgb({int(255 + (r - 255) * t)},{int(255 + (g - 255) * t)},{int(255 + (b - 255) * t)})"
+
+    prov["color"] = [_shade(s, p) for s, p in zip(prov["share"], prov["ganador"])]
+
+    st.markdown("**Partido ganador por provincia** — color = partido, intensidad = % del ganador en su región")
+    # choropleth_map (MapLibre, planar) en vez de choropleth (geo, esférico):
+    # los polígonos GADM tienen winding que rompe el render esférico (rellena todo el globo)
+    fig_map = px.choropleth_map(
+        prov, geojson=ARG_GEOJSON, locations="provincia",
+        featureidkey="properties.NAME_1", color="provincia",
+        color_discrete_map=dict(zip(prov["provincia"], prov["color"])),
+        hover_name="provincia",
+        hover_data={"provincia": False, "region": True, "ganador": True,
+                    "share": True, "total": True},
+        center={"lat": -40, "lon": -65}, zoom=3.0,
+        map_style="white-bg", opacity=1.0,
+    )
+    fig_map.update_layout(height=560, margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
     st.plotly_chart(fig_map, use_container_width=True)
+    leyenda = " &nbsp; ".join(
+        f"<span style='display:inline-block;width:12px;height:12px;background:{base[p]};"
+        f"border-radius:2px;margin-right:5px'></span>{p}" for p in partidos
+    )
+    st.markdown(f"<div style='font-size:0.85rem;color:#666'>{leyenda}</div>",
+                unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
     with col1:
