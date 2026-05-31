@@ -309,6 +309,9 @@ def run_etl(batch_size: int = 1000) -> None:
     inserted_facts = 0
 
     with Session(engine) as session:
+        # Buscar la fecha de la última respuesta procesada para hacer el ETL incremental
+        last_processed_at = session.scalar(select(func.max(FactSurveyResponse.submitted_at)))
+        
         upsert_respondent_rows(
             session, build_respondent_rows(list(mongo_db.respondents.find({}))), table_counts
         )
@@ -318,8 +321,11 @@ def run_etl(batch_size: int = 1000) -> None:
         last_response_id = None
         while True:
             query = {}
+            if last_processed_at:
+                # Solo procesar documentos más nuevos que el último cargado en Postgres
+                query["fecha"] = {"$gt": last_processed_at.isoformat()}
             if last_response_id is not None:
-                query = {"_id": {"$gt": last_response_id}}
+                query["_id"] = {"$gt": last_response_id}
 
             response_docs = list(
                 mongo_db.responses.find(query).sort("_id", 1).limit(batch_size)
