@@ -42,6 +42,7 @@ st.plotly_chart(px.pie(seg, names="segmento", values="cantidad"), use_container_
 
 # Elemento 3: evolución mensual de imagen de gobierno
 st.subheader("3 · Evolución mensual de imagen de gobierno")
+modo = st.radio("Vista", ["Desglosado", "Combinado (saldo de imagen)"], horizontal=True)
 serie = q("""
     select t.year, t.month_number, o.option_text, count(*) n
     from fact_survey_responses f
@@ -51,7 +52,21 @@ serie = q("""
     where q.category='imagen_gobierno'
     group by 1,2,3 order by 1,2""")
 serie["periodo"] = serie["year"].astype(str) + "-" + serie["month_number"].astype(str).str.zfill(2)
-st.plotly_chart(px.line(serie, x="periodo", y="n", color="option_text"), use_container_width=True)
+if modo == "Desglosado":
+    st.plotly_chart(px.line(serie, x="periodo", y="n", color="option_text"), use_container_width=True)
+else:
+    positivas = {"Muy buena", "Buena"}
+    negativas = {"Mala", "Muy mala"}
+    serie["signo"] = serie["option_text"].apply(
+        lambda t: "pos" if t in positivas else ("neg" if t in negativas else "neutro")
+    )
+    piv = serie.pivot_table(index="periodo", columns="signo", values="n", aggfunc="sum", fill_value=0)
+    total = piv.sum(axis=1)
+    saldo = ((piv.get("pos", 0) - piv.get("neg", 0)) / total * 100).reset_index(name="saldo")
+    fig3 = px.line(saldo, x="periodo", y="saldo")
+    fig3.update_layout(yaxis_title="saldo de imagen (% positiva − % negativa)")
+    fig3.add_hline(y=0, line_dash="dot", line_color="gray")
+    st.plotly_chart(fig3, use_container_width=True)
 
 # Elemento 4: explorador interactivo (slider lambda + filtro region)
 st.subheader("4 · Explorador de predicción (descuento por recencia)")
