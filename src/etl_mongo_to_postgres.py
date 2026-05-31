@@ -14,6 +14,7 @@ try:
         Base,
         DimAnswerOption,
         DimQuestion,
+        DimRespondent,
         DimSurvey,
         DimTime,
         EtlProcessExecution,
@@ -25,6 +26,7 @@ except ModuleNotFoundError:
         Base,
         DimAnswerOption,
         DimQuestion,
+        DimRespondent,
         DimSurvey,
         DimTime,
         EtlProcessExecution,
@@ -35,10 +37,44 @@ except ModuleNotFoundError:
 TABLES_TO_AUDIT = (
     "dim_answer_options",
     "dim_questions",
+    "dim_respondents",
     "dim_surveys",
     "dim_time",
     "fact_survey_responses",
 )
+
+
+def build_respondent_rows(respondent_docs: list[dict]) -> list[dict]:
+    return [
+        {
+            "respondent_id": doc.get("respondent_id", doc["_id"]),
+            "edad": int(doc["edad"]),
+            "grupo_etario": doc["grupo_etario"],
+            "region": doc["region"],
+            "nse": doc["nse"],
+            "genero": doc["genero"],
+        }
+        for doc in respondent_docs
+    ]
+
+
+def upsert_respondent_rows(session: Session, rows: list[dict], table_counts: Counter) -> None:
+    if not rows:
+        return
+    stmt = insert(DimRespondent).values(rows)
+    result = session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["respondent_id"],
+            set_={
+                "edad": stmt.excluded.edad,
+                "grupo_etario": stmt.excluded.grupo_etario,
+                "region": stmt.excluded.region,
+                "nse": stmt.excluded.nse,
+                "genero": stmt.excluded.genero,
+            },
+        )
+    )
+    table_counts["dim_respondents"] += result.rowcount or 0
 
 
 def parse_datetime(value: str) -> dt.datetime:
@@ -271,6 +307,12 @@ def run_etl(batch_size: int = 1000) -> None:
 
     processed_docs = 0
     inserted_facts = 0
+
+    with Session(engine) as session:
+        upsert_respondent_rows(
+            session, build_respondent_rows(list(mongo_db.respondents.find({}))), table_counts
+        )
+        session.commit()
 
     with Session(engine) as session:
         last_response_id = None

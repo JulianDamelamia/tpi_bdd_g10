@@ -1,5 +1,6 @@
-pymongo
+streamlit
+pandas
+plotly
 sqlalchemy
 psycopg2-binary
 python-dotenv
-pytest

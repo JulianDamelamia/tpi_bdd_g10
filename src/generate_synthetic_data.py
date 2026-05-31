@@ -5,8 +5,10 @@ from pymongo import MongoClient, ReplaceOne
 
 try:
     from src.config import MONGODB_DATABASE, MONGODB_URL
+    from src.demographics import profile_for, party_weights, approval_weights
 except ModuleNotFoundError:
     from config import MONGODB_DATABASE, MONGODB_URL
+    from demographics import profile_for, party_weights, approval_weights
 
 
 RANDOM_SEED = 20260527
@@ -117,11 +119,20 @@ def build_response_documents(survey_number: int, valid_dates: list[dt.date]) -> 
             dt.time(random.randrange(8, 22), random.randrange(0, 60), random.randrange(0, 60)),
         )
         source = random.choice(SOURCES)
+        profile = profile_for(respondent_id)
         answers = []
 
         for question_number in range(1, QUESTIONS_PER_SURVEY + 1):
             question_id = f"{survey_id}_q{question_number:02d}"
-            answer_code = random.randint(1, len(option_texts_for(question_number)))
+            n_opts = len(option_texts_for(question_number))
+            if question_number == 1:
+                weights = party_weights(profile["region"], profile["nse"])
+                answer_code = random.choices(range(1, n_opts + 1), weights=weights)[0]
+            elif question_number == 2:
+                weights = approval_weights(profile["nse"], submitted_date)
+                answer_code = random.choices(range(1, n_opts + 1), weights=weights)[0]
+            else:
+                answer_code = random.randint(1, n_opts)
             answers.append(
                 {
                     "pregunta_id": question_id,
@@ -163,15 +174,27 @@ def generate() -> tuple[int, int]:
         for response in build_response_documents(survey_number, valid_dates):
             response_operations.append(ReplaceOne({"_id": response["_id"]}, response, upsert=True))
 
+    respondent_ids = set()
+    for survey_number in range(1, SURVEY_COUNT + 1):
+        for response_number in range(1, RESPONSES_PER_SURVEY + 1):
+            respondent_ids.add(f"person_{((survey_number * 17 + response_number) % 25000):05d}")
+    respondent_operations = [
+        ReplaceOne({"_id": rid}, {"_id": rid, **profile_for(rid)}, upsert=True)
+        for rid in sorted(respondent_ids)
+    ]
+
     if survey_operations:
         db.surveys.bulk_write(survey_operations, ordered=False)
     if response_operations:
         db.responses.bulk_write(response_operations, ordered=False)
+    if respondent_operations:
+        db.respondents.bulk_write(respondent_operations, ordered=False)
 
     db.responses.create_index("encuesta_id")
 
     print(f"Loaded {len(survey_operations)} survey documents into MongoDB.")
     print(f"Loaded {len(response_operations)} response documents into MongoDB.")
+    print(f"Loaded {len(respondent_operations)} respondent documents into MongoDB.")
     return len(survey_operations), len(response_operations)
 
 

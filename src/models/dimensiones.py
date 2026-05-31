@@ -77,3 +77,16 @@ class DimAnswerOption(Base):
 
     question: Mapped["DimQuestion"] = relationship(back_populates="options")
     responses: Mapped[list["FactSurveyResponse"]] = relationship(back_populates="answer_option")
+
+
+class DimRespondent(Base):
+    __tablename__ = "dim_respondents"
+
+    respondent_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    edad: Mapped[int] = mapped_column(Integer, nullable=False)
+    grupo_etario: Mapped[str] = mapped_column(String(15), nullable=False)
+    region: Mapped[str] = mapped_column(String(30), nullable=False)
+    nse: Mapped[str] = mapped_column(String(10), nullable=False)
+    genero: Mapped[str] = mapped_column(String(5), nullable=False)
+
+    responses: Mapped[list["FactSurveyResponse"]] = relationship(back_populates="respondent")
