@@ -5,7 +5,9 @@ siempre el mismo perfil entre encuestas sin persistir estado aleatorio. Los peso
 introducen correlación region/NSE -> respuesta para que segmentación y predicción
 muestren patrones reales.
 """
+import datetime as dt
 import hashlib
+import math
 
 REGIONS = ["AMBA", "Centro", "NOA", "NEA", "Cuyo", "Patagonia"]
 NSE_LEVELS = ["alto", "medio", "bajo"]
@@ -64,5 +66,29 @@ def party_weights(region: str, nse: str) -> list[float]:
     return [rb[i] * nb[i] for i in range(len(PARTIES))]
 
 
-def approval_weights(nse: str) -> list[float]:
-    return list(_APPROVAL_BY_NSE[nse])
+# polaridad de cada opcion: [Muy buena, Buena, Regular, Mala, Muy mala]
+_POLARITY = [1.0, 0.5, 0.0, -0.5, -1.0]
+_FECHA_BASE = dt.date(2024, 1, 1)
+_HORIZONTE_DIAS = 1000
+
+
+def clima_imagen(fecha: dt.date) -> float:
+    """Humor social hacia el gobierno en una fecha. Arranca apenas tibio y se
+    derrumba: tendencia negativa fuerte + olas (sube/baja) + shocks mensuales
+    deterministicos para que la serie quede bien movida."""
+    dias = (fecha - _FECHA_BASE).days
+    t01 = dias / _HORIZONTE_DIAS
+    tendencia = 0.2 - 2.6 * t01                        # de +0.2 a -2.4: se desploma
+    ola = 0.55 * math.sin(2 * math.pi * dias / 95)     # sube y baja
+    h = hashlib.sha256(f"{fecha.year}-{fecha.month}".encode()).digest()
+    shock = (h[0] / 255.0 - 0.5) * 1.1                 # golpe mensual ~[-0.55, 0.55]
+    return tendencia + ola + shock
+
+
+def approval_weights(nse: str, fecha: dt.date | None = None) -> list[float]:
+    base = _APPROVAL_BY_NSE[nse]
+    if fecha is None:
+        return list(base)
+    c = clima_imagen(fecha)
+    beta = 1.4
+    return [base[i] * math.exp(beta * c * _POLARITY[i]) for i in range(len(base))]

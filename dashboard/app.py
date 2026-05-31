@@ -152,7 +152,8 @@ with tab_imagen:
         st.markdown("**Saldo de imagen por NSE** (cuanto más bajo, más crítico)")
         sn = saldo_imagen(img_nse, "nse")
         st.plotly_chart(px.bar(sn, x="nse", y="saldo", color="saldo",
-                               color_continuous_scale="RdYlGn"), use_container_width=True)
+                               color_continuous_scale="RdYlGn",
+                               range_color=[-80, 80]), use_container_width=True)
     img_reg = q("""
         select r.region, o.option_text, count(*) n
         from fact_survey_responses f
@@ -164,7 +165,8 @@ with tab_imagen:
         st.markdown("**Saldo de imagen por región**")
         sr = saldo_imagen(img_reg, "region")
         st.plotly_chart(px.bar(sr, x="region", y="saldo", color="saldo",
-                               color_continuous_scale="RdYlGn"), use_container_width=True)
+                               color_continuous_scale="RdYlGn",
+                               range_color=[-80, 80]), use_container_width=True)
 
 # ===================== TAB 3 — PRIORIDADES =====================
 with tab_prio:

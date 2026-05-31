@@ -129,7 +129,7 @@ def build_response_documents(survey_number: int, valid_dates: list[dt.date]) -> 
                 weights = party_weights(profile["region"], profile["nse"])
                 answer_code = random.choices(range(1, n_opts + 1), weights=weights)[0]
             elif question_number == 2:
-                weights = approval_weights(profile["nse"])
+                weights = approval_weights(profile["nse"], submitted_date)
                 answer_code = random.choices(range(1, n_opts + 1), weights=weights)[0]
             else:
                 answer_code = random.randint(1, n_opts)
