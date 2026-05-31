@@ -20,13 +20,20 @@
 --   p_fecha_corte -> predecimos "al dia X" (solo usa respuestas <= esa fecha)
 --   p_lambda      -> velocidad de olvido por dia (0 = no descuenta nada)
 --   p_alpha0      -> fuerza total del prior (mas alto = mas conservador)
+--   p_region      -> filtro opcional: solo encuestados de esa region (null = todas)
+--   p_nse         -> filtro opcional: solo encuestados de ese NSE (null = todos)
 -- =====================================================================
+
+-- drop de la firma vieja (4 args) para evitar ambiguedad con la nueva (6 args con defaults)
+drop function if exists predecir_shares(text, date, numeric, numeric);
 
 create or replace function predecir_shares(
     p_categoria   text,
     p_fecha_corte date,
     p_lambda      numeric default 0.0,
-    p_alpha0      numeric default 5.0
+    p_alpha0      numeric default 5.0,
+    p_region      text default null,
+    p_nse         text default null
 )
 returns table (
     opcion         text,     -- la opcion (ej. partido)
@@ -56,11 +63,14 @@ begin
             o.option_text as opcion,
             exp( -p_lambda * (p_fecha_corte - t.full_date) ) as w
         from fact_survey_responses f
-        join dim_questions      q on f.question_id = q.question_id
-        join dim_answer_options o on f.option_id   = o.option_id
-        join dim_time           t on f.date_key    = t.date_key
+        join dim_questions      q on f.question_id   = q.question_id
+        join dim_answer_options o on f.option_id     = o.option_id
+        join dim_time           t on f.date_key      = t.date_key
+        join dim_respondents    r on f.respondent_id = r.respondent_id
         where q.category = p_categoria
           and t.full_date <= p_fecha_corte
+          and (p_region is null or r.region = p_region)
+          and (p_nse    is null or r.nse    = p_nse)
     ),
     -- acumulamos peso y conteo crudo por opcion (left join para no perder opciones sin datos)
     agg as (
@@ -105,7 +115,9 @@ $$;
 
 
 -- ejemplos:
--- sin descuento (toda la historia pesa igual):
+-- sin descuento, todas las regiones:
 -- select * from predecir_shares('intencion_voto', '2026-09-26', 0.0, 5.0);
--- con descuento fuerte (pondera lo reciente, vida media ~35 dias):
+-- con descuento fuerte (pondera lo reciente):
 -- select * from predecir_shares('intencion_voto', '2026-09-26', 0.02, 5.0);
+-- filtrando por region:
+-- select * from predecir_shares('intencion_voto', '2026-09-26', 0.0, 5.0, 'AMBA', null);

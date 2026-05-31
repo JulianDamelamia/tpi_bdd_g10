@@ -28,21 +28,26 @@ as $$
 begin
 
     -- chequeo de que la dimension sea valida
-    if p_dimension not in ('opcion', 'fuente', 'mes') then
-        raise exception 'la dimension % no vale, usa: opcion / fuente / mes', p_dimension;
+    if p_dimension not in ('opcion','fuente','mes','region','nse','grupo_etario','genero') then
+        raise exception 'la dimension % no vale, usa: opcion/fuente/mes/region/nse/grupo_etario/genero', p_dimension;
     end if;
 
     return query
     with base as (
         select
             (case p_dimension
-                when 'opcion' then o.option_text
-                when 'fuente' then f.source
-                when 'mes'    then t.month
+                when 'opcion'       then o.option_text
+                when 'fuente'       then f.source
+                when 'mes'          then t.month
+                when 'region'       then r.region
+                when 'nse'          then r.nse
+                when 'grupo_etario' then r.grupo_etario
+                when 'genero'       then r.genero
             end)::text as segmento
         from fact_survey_responses f
-        join dim_questions      q on f.question_id = q.question_id
-        join dim_time           t on f.date_key    = t.date_key
+        join dim_questions      q on f.question_id   = q.question_id
+        join dim_time           t on f.date_key      = t.date_key
+        join dim_respondents    r on f.respondent_id = r.respondent_id
         left join dim_answer_options o on f.option_id = o.option_id
         where q.category = p_categoria
           and t.full_date between p_fecha_desde and p_fecha_hasta
