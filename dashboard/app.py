@@ -61,7 +61,6 @@ with tab_voto:
     fig.update_layout(yaxis_title="share % (con intervalo de credibilidad 95%)")
     st.plotly_chart(fig, use_container_width=True)
 
-    col1, col2 = st.columns(2)
     voto_reg = q("""
         select r.region, o.option_text opcion, count(*) n
         from fact_survey_responses f
@@ -71,6 +70,36 @@ with tab_voto:
         where q.category='intencion_voto' group by 1,2""")
     piv = voto_reg.pivot_table(index="region", columns="opcion", values="n", fill_value=0)
     pct = piv.div(piv.sum(axis=1), axis=0) * 100
+
+    # mapa: una burbuja por region, coloreada por el partido ganador
+    REGION_CENTROIDS = {
+        "AMBA":      (-34.6, -58.4),
+        "Centro":    (-33.0, -62.0),
+        "NOA":       (-25.0, -65.5),
+        "NEA":       (-27.5, -57.5),
+        "Cuyo":      (-33.5, -68.8),
+        "Patagonia": (-44.0, -68.0),
+    }
+    mapa = pd.DataFrame({
+        "region": pct.index,
+        "ganador": pct.idxmax(axis=1).values,
+        "share": pct.max(axis=1).round(1).values,
+        "total": piv.sum(axis=1).values,
+    })
+    mapa["lat"] = mapa["region"].map(lambda r: REGION_CENTROIDS[r][0])
+    mapa["lon"] = mapa["region"].map(lambda r: REGION_CENTROIDS[r][1])
+    st.markdown("**Partido ganador por región**")
+    fig_map = px.scatter_geo(
+        mapa, lat="lat", lon="lon", color="ganador", size="total", text="region",
+        hover_data={"share": True, "lat": False, "lon": False, "total": True},
+    )
+    fig_map.update_traces(textposition="top center")
+    fig_map.update_geos(scope="south america", showcountries=True,
+                        countrycolor="gray", fitbounds="locations")
+    fig_map.update_layout(height=520, margin=dict(l=0, r=0, t=0, b=0))
+    st.plotly_chart(fig_map, use_container_width=True)
+
+    col1, col2 = st.columns(2)
     with col1:
         st.markdown("**Voto por región (% dentro de cada región)**")
         st.plotly_chart(
