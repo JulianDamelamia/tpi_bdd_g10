@@ -49,10 +49,13 @@ _NSE_BIAS = {
     "medio": [1.1, 1.1, 1.0, 1.0, 1.0],
     "bajo":  [1.7, 1.3, 0.6, 0.7, 1.2],
 }
+# imagen sesgada a negativa (contexto de ajuste/desfinanciamiento), con gradiente
+# por NSE: el NSE alto la sufre menos, el bajo es el mas critico.
+# orden de opciones: [Muy buena, Buena, Regular, Mala, Muy mala]
 _APPROVAL_BY_NSE = {
-    "alto":  [1.6, 1.5, 1.0, 0.7, 0.5],
-    "medio": [1.0, 1.2, 1.4, 1.0, 0.8],
-    "bajo":  [0.6, 0.8, 1.2, 1.5, 1.6],
+    "alto":  [0.9, 1.2, 1.4, 1.4, 1.0],
+    "medio": [0.5, 0.9, 1.2, 1.7, 1.6],
+    "bajo":  [0.3, 0.5, 1.0, 1.9, 2.4],
 }
 
 
