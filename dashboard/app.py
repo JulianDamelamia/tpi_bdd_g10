@@ -3,6 +3,7 @@
 Organizado en pestañas: intención de voto, imagen de gobierno, prioridades,
 muestra/demografía y un explorador de predicción bayesiana.
 """
+import html
 import json
 import sys
 import pathlib
@@ -131,9 +132,11 @@ with tab_voto:
     )
     fig_map.update_layout(height=560, margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
     st.plotly_chart(fig_map, use_container_width=True)
+    # html.escape: los nombres de partido vienen de la DB (option_text) y se inyectan
+    # en unsafe_allow_html -> escapar para evitar XSS almacenado
     leyenda = " &nbsp; ".join(
         f"<span style='display:inline-block;width:12px;height:12px;background:{base[p]};"
-        f"border-radius:2px;margin-right:5px'></span>{p}" for p in partidos
+        f"border-radius:2px;margin-right:5px'></span>{html.escape(str(p))}" for p in partidos
     )
     st.markdown(f"<div style='font-size:0.85rem;color:#666'>{leyenda}</div>",
                 unsafe_allow_html=True)
