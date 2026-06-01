@@ -29,7 +29,7 @@ def main() -> None:
     clean_mongo()
     clean_postgres()
     generate()
-    run_etl()
+    run_etl(batch_size=10_000)
 
 
 if __name__ == "__main__":

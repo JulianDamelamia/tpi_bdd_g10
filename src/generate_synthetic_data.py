@@ -12,9 +12,55 @@ except ModuleNotFoundError:
 
 
 RANDOM_SEED = 20260527
-SURVEY_COUNT = 1000
-QUESTIONS_PER_SURVEY = 3
-RESPONSES_PER_SURVEY = 4
+SURVEY_COUNT = 10
+METADATA_PREGUNTAS = {
+    1:("A que espacio politico votaria si las elecciones fueran hoy?",
+        "multiple_choice",
+        "intencion_voto"
+    ),
+    2:(
+        "Como evalua la gestion del gobierno nacional?",
+        "multiple_choice",
+        "imagen_gobierno",
+    ),
+    3:(
+        "Cual deberia ser la principal prioridad de la agenda publica?",
+        "multiple_choice",
+        "prioridad_publica",
+    ),
+    4:(
+        "Qué expectativa tiene sobre su economía a futuro?",
+        "multiple_choice",
+        "imagen_gobierno",
+    ),
+    5:(
+        "Qué imagen tiene del candidato A?",
+        "multiple_choice",
+        "imagen_gobierno",
+    ),
+    6:(
+        "Qué imagen tiene del candidato B?",
+        "multiple_choice",
+        "imagen_gobierno",
+    ),
+    7:(
+        "Qué imagen tiene del candidato C?",
+        "multiple_choice",
+        "imagen_gobierno",
+    ),
+    8:(
+        "Qué imagen tiene del candidato D?",
+        "multiple_choice",
+        "imagen_gobierno",
+    ),
+    9:(
+        "Qué imagen tiene del candidato F?",
+        "multiple_choice",
+        "imagen_gobierno",
+    ),
+}
+QUESTIONS_PER_SURVEY = len(METADATA_PREGUNTAS)
+RESPONSES_PER_SURVEY = 10_000
 TIME_DAYS = 1000
 
 TOPICS = [
@@ -42,29 +88,13 @@ PRIORITIES = ["Inflacion", "Seguridad", "Empleo", "Educacion", "Salud"]
 def option_texts_for(question_number: int) -> list[str]:
     if question_number == 1:
         return PARTIES
-    if question_number == 2:
-        return APPROVAL
-    return PRIORITIES
+    if question_number == 3:
+        return PRIORITIES
+    return APPROVAL
 
 
-def question_metadata(question_number: int) -> tuple[str, str, str]:
-    if question_number == 1:
-        return (
-            "A que espacio politico votaria si las elecciones fueran hoy?",
-            "multiple_choice",
-            "intencion_voto",
-        )
-    if question_number == 2:
-        return (
-            "Como evalua la gestion del gobierno nacional?",
-            "multiple_choice",
-            "imagen_gobierno",
-        )
-    return (
-        "Cual deberia ser la principal prioridad de la agenda publica?",
-        "multiple_choice",
-        "prioridad_publica",
-    )
+def question_metadata(question_number: int, metadata_preguntas:dict) -> tuple[str, str, str]:
+    return metadata_preguntas[question_number]
 
 
 def build_survey_document(survey_number: int, created_base: dt.datetime) -> dict:
@@ -74,7 +104,7 @@ def build_survey_document(survey_number: int, created_base: dt.datetime) -> dict
 
     for question_number in range(1, QUESTIONS_PER_SURVEY + 1):
         question_id = f"{survey_id}_q{question_number:02d}"
-        question_text, question_type, category = question_metadata(question_number)
+        question_text, question_type, category = question_metadata(question_number, METADATA_PREGUNTAS)
         questions.append(
             {
                 "pregunta_id": question_id,
@@ -109,8 +139,9 @@ def build_survey_document(survey_number: int, created_base: dt.datetime) -> dict
 def build_response_documents(survey_number: int, valid_dates: list[dt.date]) -> list[dict]:
     survey_id = f"survey_{survey_number:04d}"
     responses = []
-
-    for response_number in range(1, RESPONSES_PER_SURVEY + 1):
+    numero_respuestas = int(random.gauss(RESPONSES_PER_SURVEY, RESPONSES_PER_SURVEY/7))
+    print(f'Generando {numero_respuestas} respuestas sintéticas')
+    for response_number in range(1, numero_respuestas + 1):
         response_id = f"resp_{survey_number:04d}_{response_number:03d}"
         respondent_id = f"person_{((survey_number * 17 + response_number) % 25000):05d}"
         submitted_date = random.choice(valid_dates)
@@ -128,11 +159,11 @@ def build_response_documents(survey_number: int, valid_dates: list[dt.date]) -> 
             if question_number == 1:
                 weights = party_weights(profile["region"], profile["nse"])
                 answer_code = random.choices(range(1, n_opts + 1), weights=weights)[0]
-            elif question_number == 2:
+            elif question_number == 3:
+                answer_code = random.randint(1, n_opts)
+            else:
                 weights = approval_weights(profile["nse"], submitted_date)
                 answer_code = random.choices(range(1, n_opts + 1), weights=weights)[0]
-            else:
-                answer_code = random.randint(1, n_opts)
             answers.append(
                 {
                     "pregunta_id": question_id,
@@ -167,17 +198,15 @@ def generate() -> tuple[int, int]:
     survey_operations = []
     response_operations = []
 
+    respondent_ids = set()
     for survey_number in range(1, SURVEY_COUNT + 1):
         survey = build_survey_document(survey_number, created_base)
         survey_operations.append(ReplaceOne({"_id": survey["_id"]}, survey, upsert=True))
 
         for response in build_response_documents(survey_number, valid_dates):
             response_operations.append(ReplaceOne({"_id": response["_id"]}, response, upsert=True))
+            respondent_ids.add(response["encuestado_id"])
 
-    respondent_ids = set()
-    for survey_number in range(1, SURVEY_COUNT + 1):
-        for response_number in range(1, RESPONSES_PER_SURVEY + 1):
-            respondent_ids.add(f"person_{((survey_number * 17 + response_number) % 25000):05d}")
     respondent_operations = [
         ReplaceOne({"_id": rid}, {"_id": rid, **profile_for(rid)}, upsert=True)
         for rid in sorted(respondent_ids)
