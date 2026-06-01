@@ -143,10 +143,18 @@ with tab_voto:
 
     col1, col2 = st.columns(2)
     with col1:
+        # segmentacion regional via la funcion SQL segmentar_respuestas (mineria in-database)
+        st.markdown("**Distribución regional del voto** (función `segmentar_respuestas`)")
+        seg_reg = q("select * from segmentar_respuestas('intencion_voto', '2024-01-01', :c, 'region')",
+                    {"c": CORTE})
+        st.plotly_chart(px.pie(seg_reg, names="segmento", values="cantidad", hole=0.4),
+                        use_container_width=True)
+    with col2:
         st.markdown("**Voto por región (% dentro de cada región)**")
         st.plotly_chart(
             px.imshow(pct.round(1), text_auto=True, aspect="auto", color_continuous_scale="Blues"),
             use_container_width=True)
+
     voto_nse = q("""
         select r.nse, o.option_text opcion, count(*) n
         from fact_survey_responses f
@@ -154,10 +162,9 @@ with tab_voto:
         join dim_answer_options o on f.option_id=o.option_id
         join dim_respondents r on f.respondent_id=r.respondent_id
         where q.category='intencion_voto' group by 1,2""")
-    with col2:
-        st.markdown("**Voto por nivel socioeconómico**")
-        st.plotly_chart(px.bar(voto_nse, x="nse", y="n", color="opcion", barmode="group"),
-                        use_container_width=True)
+    st.markdown("**Voto por nivel socioeconómico**")
+    st.plotly_chart(px.bar(voto_nse, x="nse", y="n", color="opcion", barmode="group"),
+                    use_container_width=True)
 
 # ===================== TAB 2 — IMAGEN DE GOBIERNO =====================
 with tab_imagen:
