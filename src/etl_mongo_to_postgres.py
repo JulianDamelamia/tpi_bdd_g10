@@ -339,17 +339,19 @@ def run_etl(batch_size: int = 1000) -> None:
 
     processed_docs = 0
     inserted_facts = 0
-
-    with Session(engine) as session:
-        # Buscar la fecha de la última respuesta procesada para hacer el ETL incremental
-        last_processed_at = session.scalar(select(func.max(FactSurveyResponse.submitted_at)))
+    
+    #estas lineas sobran
+    # with Session(engine) as session:
+    #     # Buscar la fecha de la última respuesta procesada para hacer el ETL incremental
+    #     last_processed_at = session.scalar(select(func.max(FactSurveyResponse.submitted_at)))
         
-        upsert_respondent_rows(
-            session, build_respondent_rows(list(mongo_db.respondents.find({}))), table_counts
-        )
-        session.commit()
+    #     upsert_respondent_rows(
+    #         session, build_respondent_rows(list(mongo_db.respondents.find({}))), table_counts
+    #     )
+    #     session.commit()
 
     with Session(engine) as session:
+        last_processed_at = session.scalar(select(func.max(FactSurveyResponse.submitted_at)))
         last_response_id = None
         while True:
             query = {}
