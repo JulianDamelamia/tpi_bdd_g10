@@ -5,3 +5,5 @@ __pycache__/
 .DS_Store
 RESUME_STATE.md
 .vscode/
+docker-compose.local.yml
+docker-compose.yml

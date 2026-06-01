@@ -43,7 +43,7 @@ TABLES_TO_AUDIT = (
     "fact_survey_responses",
 )
 
-
+# parsear docs a diccionario
 def build_respondent_rows(respondent_docs: list[dict]) -> list[dict]:
     return [
         {
@@ -57,7 +57,7 @@ def build_respondent_rows(respondent_docs: list[dict]) -> list[dict]:
         for doc in respondent_docs
     ]
 
-
+#upsert en dim_encuestado, on conflict do update
 def upsert_respondent_rows(session: Session, rows: list[dict], table_counts: Counter) -> None:
     if not rows:
         return
@@ -74,9 +74,30 @@ def upsert_respondent_rows(session: Session, rows: list[dict], table_counts: Cou
             },
         )
     )
-    table_counts["dim_respondents"] += result.rowcount or 0
+    updated = result.rowcount or 0
+    table_counts["dim_respondents"] += updated
+    print(f"dim_respondents: upserted {updated} rows")
 
 
+def load_respondents_for_batch(session: Session, mongo_db, response_docs: list[dict], table_counts: Counter) -> None:
+    respondent_ids = {response_doc["encuestado_id"] for response_doc in response_docs}
+    if not respondent_ids:
+        return
+
+    respondent_docs = list(
+        mongo_db.respondents.find({"_id": {"$in": list(respondent_ids)}})
+    )
+    found_ids = {doc.get("respondent_id", doc["_id"]) for doc in respondent_docs}
+    missing_ids = respondent_ids - found_ids
+    if missing_ids:
+        raise RuntimeError(
+            f"Missing respondent documents in MongoDB for ids: {sorted(missing_ids)}"
+        )
+
+    upsert_respondent_rows(session, build_respondent_rows(respondent_docs), table_counts)
+
+#funciones accesorias
+##
 def parse_datetime(value: str) -> dt.datetime:
     parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
@@ -86,7 +107,7 @@ def parse_datetime(value: str) -> dt.datetime:
 
 def to_date_key(value: dt.datetime) -> int:
     return int(value.strftime("%Y%m%d"))
-
+##
 
 def build_time_row(submitted_at: dt.datetime) -> dict:
     full_date = submitted_at.date()
@@ -102,6 +123,8 @@ def build_time_row(submitted_at: dt.datetime) -> dict:
 
 
 def build_dimension_rows(survey_docs: list[dict], seen_keys: dict[str, set]) -> dict[str, list[dict]]:
+    '''construye encuestas, preguntas y opciones desde los docs, las devuelve como dict
+    '''
     surveys = []
     questions = []
     options = []
@@ -158,7 +181,7 @@ def build_dimension_rows(survey_docs: list[dict], seen_keys: dict[str, set]) -> 
         "dim_answer_options": options,
     }
 
-
+#upsert de dim_encuestas
 def upsert_dimension_rows(session: Session, rows_by_table: dict[str, list[dict]], table_counts: Counter) -> None:
     survey_rows = rows_by_table["dim_surveys"]
     if survey_rows:
@@ -175,7 +198,9 @@ def upsert_dimension_rows(session: Session, rows_by_table: dict[str, list[dict]]
                 },
             )
         )
-        table_counts["dim_surveys"] += result.rowcount or 0
+        updated = result.rowcount or 0
+        table_counts["dim_surveys"] += updated
+        print(f"dim_surveys: upserted {updated} rows")
 
     question_rows = rows_by_table["dim_questions"]
     if question_rows:
@@ -191,7 +216,9 @@ def upsert_dimension_rows(session: Session, rows_by_table: dict[str, list[dict]]
                 },
             )
         )
-        table_counts["dim_questions"] += result.rowcount or 0
+        updated = result.rowcount or 0
+        table_counts["dim_questions"] += updated
+        print(f"dim_questions: upserted {updated} rows")
 
     option_rows = rows_by_table["dim_answer_options"]
     if option_rows:
@@ -206,7 +233,9 @@ def upsert_dimension_rows(session: Session, rows_by_table: dict[str, list[dict]]
                 },
             )
         )
-        table_counts["dim_answer_options"] += result.rowcount or 0
+        updated = result.rowcount or 0
+        table_counts["dim_answer_options"] += updated
+        print(f"dim_answer_options: upserted {updated} rows")
 
 
 def insert_time_rows(session: Session, time_rows_by_key: dict[int, dict], table_counts: Counter) -> None:
@@ -216,9 +245,11 @@ def insert_time_rows(session: Session, time_rows_by_key: dict[int, dict], table_
 
     stmt = insert(DimTime).values(time_rows)
     result = session.execute(stmt.on_conflict_do_nothing(index_elements=["date_key"]))
-    table_counts["dim_time"] += result.rowcount or 0
+    inserted = result.rowcount or 0
+    table_counts["dim_time"] += inserted
+    print(f"dim_time: inserted {inserted} rows")
 
-
+#construye tabla de hechos
 def build_fact_rows(response_docs: list[dict], time_rows_by_key: dict[int, dict]) -> tuple[list[dict], dt.datetime | None, dt.datetime | None]:
     fact_rows = []
     process_from = None
@@ -263,6 +294,7 @@ def insert_fact_rows(session: Session, fact_rows: list[dict], table_counts: Coun
     )
     inserted_rows = result.rowcount or 0
     table_counts["fact_survey_responses"] += inserted_rows
+    print(f"fact_survey_responses: inserted {inserted_rows} rows")
     return inserted_rows
 
 
@@ -292,7 +324,7 @@ def register_process_executions(
             )
         )
 
-
+#en resumen se fija el timestamp del ultimo proceso, lee los docs
 def run_etl(batch_size: int = 1000) -> None:
     process_id = str(uuid.uuid4())
     started_at = dt.datetime.now(dt.timezone.utc)
@@ -307,17 +339,19 @@ def run_etl(batch_size: int = 1000) -> None:
 
     processed_docs = 0
     inserted_facts = 0
-
-    with Session(engine) as session:
-        # Buscar la fecha de la última respuesta procesada para hacer el ETL incremental
-        last_processed_at = session.scalar(select(func.max(FactSurveyResponse.submitted_at)))
+    
+    #estas lineas sobran
+    # with Session(engine) as session:
+    #     # Buscar la fecha de la última respuesta procesada para hacer el ETL incremental
+    #     last_processed_at = session.scalar(select(func.max(FactSurveyResponse.submitted_at)))
         
-        upsert_respondent_rows(
-            session, build_respondent_rows(list(mongo_db.respondents.find({}))), table_counts
-        )
-        session.commit()
+    #     upsert_respondent_rows(
+    #         session, build_respondent_rows(list(mongo_db.respondents.find({}))), table_counts
+    #     )
+    #     session.commit()
 
     with Session(engine) as session:
+        last_processed_at = session.scalar(select(func.max(FactSurveyResponse.submitted_at)))
         last_response_id = None
         while True:
             query = {}
@@ -340,6 +374,8 @@ def run_etl(batch_size: int = 1000) -> None:
             missing_survey_ids = set(survey_ids) - set(survey_docs_by_id)
             if missing_survey_ids:
                 raise RuntimeError(f"Missing survey documents: {sorted(missing_survey_ids)}")
+
+            load_respondents_for_batch(session, mongo_db, response_docs, table_counts)
 
             rows_by_table = build_dimension_rows(survey_docs, seen_keys)
             upsert_dimension_rows(session, rows_by_table, table_counts)
