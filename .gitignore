@@ -14,4 +14,3 @@ docker-compose.yml
 =======
 .vscode/
 docker-compose.local.yml
->>>>>>> 75168ab (modifiqué el generado de datos sintéticos para que genere pocas encuestas con muchas respuestas (cantidad random normal centrada en 10K). Además agregué distintas preguntas a cada encuesta y modifiqué las funciones correspondientes para que se reflejen correctamente los cambios. Por último corregí un bug en el que el conjunto respondents_id se generaba desde un rango fijo, luego al cambiar la cantidad de respondents me tiraba error Alchemy porque los ids nuevos no estaban en la base de datos. Lo que hace ahora Mongo es contener los respondents_id referenciados directamente desde las respuestas, luego la base SQL actualiza correctamente su dimensión de encuestados)
